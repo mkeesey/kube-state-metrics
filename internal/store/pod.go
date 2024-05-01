@@ -35,12 +35,33 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+type MetricFilterFunc func(*metric.Metric) bool
+
 var (
 	descPodLabelsDefaultLabels = []string{"namespace", "pod", "uid"}
 	podStatusReasons           = []string{"Evicted", "NodeAffinity", "NodeLost", "Shutdown", "UnexpectedAdmissionError"}
+	KeepAllFilter              = func(*metric.Metric) bool {
+		return false
+	}
+	DropFalseFilter = func(m *metric.Metric) bool {
+		// Series with "condition" labels generate higher cardinality with redundant information.
+		// For example, condition="true" = 1, condition="false" = 0, condition="unknown" = 0.
+		for _, v := range m.LabelValues {
+			// Make sure the value for condition is of the boolean variety.  Some metrics use condition for the name
+			// of the condition.
+			isBoolean := v == "true" || v == "false" || v == "unknown"
+			if isBoolean && v != "true" {
+				return true
+			}
+		}
+
+		// Drop series with value of 0.  This is useful to reduce cardinality of metrics
+		// that are in one of several states.  phase="Running" = 1, phase="Pending" = 0.
+		return isFalse(m.Value)
+	}
 )
 
-func podMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generator.FamilyGenerator {
+func podMetricFamilies(allowAnnotationsList, allowLabelsList []string, filterFn MetricFilterFunc) []generator.FamilyGenerator {
 	return []generator.FamilyGenerator{
 		createPodCompletionTimeFamilyGenerator(),
 		createPodContainerInfoFamilyGenerator(),
@@ -82,14 +103,14 @@ func podMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generat
 		createPodSpecVolumesPersistentVolumeClaimsInfoFamilyGenerator(),
 		createPodSpecVolumesPersistentVolumeClaimsReadonlyFamilyGenerator(),
 		createPodStartTimeFamilyGenerator(),
-		createPodStatusPhaseFamilyGenerator(),
-		createPodStatusQosClassFamilyGenerator(),
-		createPodStatusReadyFamilyGenerator(),
+		createPodStatusQosClassFamilyGenerator(filterFn),
 		createPodStatusReadyTimeFamilyGenerator(),
 		createPodStatusInitializedTimeFamilyGenerator(),
 		createPodStatusContainerReadyTimeFamilyGenerator(),
-		createPodStatusReasonFamilyGenerator(),
-		createPodStatusScheduledFamilyGenerator(),
+		createPodStatusPhaseFamilyGenerator(filterFn),
+		createPodStatusReadyFamilyGenerator(filterFn),
+		createPodStatusReasonFamilyGenerator(filterFn),
+		createPodStatusScheduledFamilyGenerator(filterFn),
 		createPodStatusScheduledTimeFamilyGenerator(),
 		createPodStatusUnschedulableFamilyGenerator(),
 		createPodTolerationsFamilyGenerator(),
@@ -1333,7 +1354,7 @@ func createPodStartTimeFamilyGenerator() generator.FamilyGenerator {
 	)
 }
 
-func createPodStatusPhaseFamilyGenerator() generator.FamilyGenerator {
+func createPodStatusPhaseFamilyGenerator(filterFn MetricFilterFunc) generator.FamilyGenerator {
 	return *generator.NewFamilyGeneratorWithStability(
 		"kube_pod_status_phase",
 		"The pods current phase.",
@@ -1359,15 +1380,19 @@ func createPodStatusPhaseFamilyGenerator() generator.FamilyGenerator {
 				{string(v1.PodRunning), phase == v1.PodRunning},
 			}
 
-			ms := make([]*metric.Metric, len(phases))
+			ms := make([]*metric.Metric, 0, len(phases))
 
-			for i, p := range phases {
-				ms[i] = &metric.Metric{
-
+			for _, p := range phases {
+				m := &metric.Metric{
 					LabelKeys:   []string{"phase"},
 					LabelValues: []string{p.n},
 					Value:       boolFloat64(p.v),
 				}
+				if filterFn(m) {
+					continue
+				}
+
+				ms = append(ms, m)
 			}
 
 			return &metric.Family{
@@ -1459,7 +1484,7 @@ func createPodStatusReadyTimeFamilyGenerator() generator.FamilyGenerator {
 	)
 }
 
-func createPodStatusQosClassFamilyGenerator() generator.FamilyGenerator {
+func createPodStatusQosClassFamilyGenerator(filterFn MetricFilterFunc) generator.FamilyGenerator {
 	return *generator.NewFamilyGeneratorWithStability(
 		"kube_pod_status_qos_class",
 		"The pods current qosClass.",
@@ -1483,15 +1508,19 @@ func createPodStatusQosClassFamilyGenerator() generator.FamilyGenerator {
 				{string(v1.PodQOSGuaranteed), class == v1.PodQOSGuaranteed},
 			}
 
-			ms := make([]*metric.Metric, len(qosClasses))
+			ms := make([]*metric.Metric, 0, len(qosClasses))
 
-			for i, p := range qosClasses {
-				ms[i] = &metric.Metric{
-
+			for _, p := range qosClasses {
+				m := &metric.Metric{
 					LabelKeys:   []string{"qos_class"},
 					LabelValues: []string{p.n},
 					Value:       boolFloat64(p.v),
 				}
+
+				if filterFn(m) {
+					continue
+				}
+				ms = append(ms, m)
 			}
 
 			return &metric.Family{
@@ -1501,7 +1530,7 @@ func createPodStatusQosClassFamilyGenerator() generator.FamilyGenerator {
 	)
 }
 
-func createPodStatusReadyFamilyGenerator() generator.FamilyGenerator {
+func createPodStatusReadyFamilyGenerator(filterFn MetricFilterFunc) generator.FamilyGenerator {
 	return *generator.NewFamilyGeneratorWithStability(
 		"kube_pod_status_ready",
 		"Describes whether the pod is ready to serve requests.",
@@ -1518,6 +1547,10 @@ func createPodStatusReadyFamilyGenerator() generator.FamilyGenerator {
 					for _, m := range conditionMetrics {
 						metric := m
 						metric.LabelKeys = []string{"condition"}
+						if filterFn(metric) {
+							continue
+						}
+
 						ms = append(ms, metric)
 					}
 				}
@@ -1530,7 +1563,7 @@ func createPodStatusReadyFamilyGenerator() generator.FamilyGenerator {
 	)
 }
 
-func createPodStatusReasonFamilyGenerator() generator.FamilyGenerator {
+func createPodStatusReasonFamilyGenerator(filterFn MetricFilterFunc) generator.FamilyGenerator {
 	return *generator.NewFamilyGeneratorWithStability(
 		"kube_pod_status_reason",
 		"The pod status reasons",
@@ -1549,6 +1582,11 @@ func createPodStatusReasonFamilyGenerator() generator.FamilyGenerator {
 				} else {
 					metric.Value = boolFloat64(false)
 				}
+
+				if filterFn(metric) {
+					continue
+				}
+
 				ms = append(ms, metric)
 			}
 
@@ -1559,7 +1597,7 @@ func createPodStatusReasonFamilyGenerator() generator.FamilyGenerator {
 	)
 }
 
-func createPodStatusScheduledFamilyGenerator() generator.FamilyGenerator {
+func createPodStatusScheduledFamilyGenerator(filterFn MetricFilterFunc) generator.FamilyGenerator {
 	return *generator.NewFamilyGeneratorWithStability(
 		"kube_pod_status_scheduled",
 		"Describes the status of the scheduling process for the pod.",
@@ -1576,6 +1614,10 @@ func createPodStatusScheduledFamilyGenerator() generator.FamilyGenerator {
 					for _, m := range conditionMetrics {
 						metric := m
 						metric.LabelKeys = []string{"condition"}
+
+						if filterFn(metric) {
+							continue
+						}
 						ms = append(ms, metric)
 					}
 				}

@@ -77,6 +77,7 @@ type Options struct {
 	CustomResourcesOnly  bool  `yaml:"custom_resources_only"`
 	EnableGZIPEncoding   bool  `yaml:"enable_gzip_encoding"`
 	Help                 bool  `yaml:"help"`
+	MetricKeepTrue       bool  `yaml:"metric_keep_true""`
 	TrackUnscheduledPods bool  `yaml:"track_unscheduled_pods"`
 	UseAPIServerCache    bool  `yaml:"use_api_server_cache"`
 }
@@ -203,4 +204,9 @@ func (o *Options) Validate() error {
 	}
 
 	return nil
+}
+
+// Changed returns true if the value of the flag with the given name was changed.
+func (o *Options) Changed(name string) bool {
+	return o.cmd.Flags().Changed(name)
 }

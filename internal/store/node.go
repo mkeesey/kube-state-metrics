@@ -42,7 +42,7 @@ var (
 	descNodeLabelsDefaultLabels = []string{"node"}
 )
 
-func nodeMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generator.FamilyGenerator {
+func nodeMetricFamilies(allowAnnotationsList, allowLabelsList []string, filterFn MetricFilterFunc) []generator.FamilyGenerator {
 	return []generator.FamilyGenerator{
 		createNodeAnnotationsGenerator(allowAnnotationsList),
 		createNodeCreatedFamilyGenerator(),
@@ -54,8 +54,8 @@ func nodeMetricFamilies(allowAnnotationsList, allowLabelsList []string) []genera
 		createNodeSpecUnschedulableFamilyGenerator(),
 		createNodeStatusAllocatableFamilyGenerator(),
 		createNodeStatusCapacityFamilyGenerator(),
-		createNodeStatusConditionFamilyGenerator(),
 		createNodeStateAddressFamilyGenerator(),
+		createNodeStatusConditionFamilyGenerator(filterFn),
 	}
 }
 
@@ -475,7 +475,7 @@ func createNodeStatusCapacityFamilyGenerator() generator.FamilyGenerator {
 // containing all conditions for extensibility. Third party plugin may report
 // customized condition for cluster node (e.g. node-problem-detector), and
 // Kubernetes may add new core conditions in future.
-func createNodeStatusConditionFamilyGenerator() generator.FamilyGenerator {
+func createNodeStatusConditionFamilyGenerator(filterFn MetricFilterFunc) generator.FamilyGenerator {
 	return *generator.NewFamilyGeneratorWithStability(
 		"kube_node_status_condition",
 		"The condition of a cluster node.",
@@ -483,19 +483,22 @@ func createNodeStatusConditionFamilyGenerator() generator.FamilyGenerator {
 		basemetrics.STABLE,
 		"",
 		wrapNodeFunc(func(n *v1.Node) *metric.Family {
-			ms := make([]*metric.Metric, len(n.Status.Conditions)*len(conditionStatuses))
+			ms := make([]*metric.Metric, 0, len(n.Status.Conditions)*len(conditionStatuses))
 
 			// Collect node conditions and while default to false.
-			for i, c := range n.Status.Conditions {
+			for _, c := range n.Status.Conditions {
 				conditionMetrics := addConditionMetrics(c.Status)
 
-				for j, m := range conditionMetrics {
+				for _, m := range conditionMetrics {
 					metric := m
 
 					metric.LabelKeys = []string{"condition", "status"}
 					metric.LabelValues = append([]string{string(c.Type)}, metric.LabelValues...)
 
-					ms[i*len(conditionStatuses)+j] = metric
+					if filterFn(metric) {
+						continue
+					}
+					ms = append(ms, metric)
 				}
 			}
 

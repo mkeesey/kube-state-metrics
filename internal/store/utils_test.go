@@ -319,3 +319,44 @@ func TestMergeKeyValues(t *testing.T) {
 		})
 	}
 }
+
+func TestIsFalse(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    float64
+		expected bool
+	}{
+		{
+			name:     "zero",
+			input:    0.0,
+			expected: true,
+		},
+		{
+			name:     "one",
+			input:    1.0,
+			expected: false,
+		},
+		{
+			name:     "decimal",
+			input:    2.94,
+			expected: false,
+		},
+		{
+			name:     "small decimal",
+			input:    0.0000002,
+			expected: false,
+		},
+		{
+			name:     "negative",
+			input:    -1.0,
+			expected: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isFalse(tc.input); got != tc.expected {
+				t.Errorf("isFalse() = %v, want %v", got, tc.expected)
+			}
+		})
+	}
+}

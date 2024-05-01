@@ -41,7 +41,7 @@ var (
 	descDeploymentLabelsDefaultLabels = []string{"namespace", "deployment"}
 )
 
-func deploymentMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generator.FamilyGenerator {
+func deploymentMetricFamilies(allowAnnotationsList, allowLabelsList []string, filterFn MetricFilterFunc) []generator.FamilyGenerator {
 	return []generator.FamilyGenerator{
 		*generator.NewFamilyGeneratorWithStability(
 			"kube_deployment_created",
@@ -166,17 +166,22 @@ func deploymentMetricFamilies(allowAnnotationsList, allowLabelsList []string) []
 			basemetrics.STABLE,
 			"",
 			wrapDeploymentFunc(func(d *v1.Deployment) *metric.Family {
-				ms := make([]*metric.Metric, len(d.Status.Conditions)*len(conditionStatuses))
+				ms := make([]*metric.Metric, 0, len(d.Status.Conditions)*len(conditionStatuses))
 
-				for i, c := range d.Status.Conditions {
+				for _, c := range d.Status.Conditions {
 					conditionMetrics := addConditionMetrics(c.Status)
 
-					for j, m := range conditionMetrics {
+					for _, m := range conditionMetrics {
 						metric := m
 
 						metric.LabelKeys = []string{"condition", "status"}
 						metric.LabelValues = append([]string{string(c.Type)}, metric.LabelValues...)
-						ms[i*len(conditionStatuses)+j] = metric
+
+						if filterFn(metric) {
+							continue
+						}
+
+						ms = append(ms, metric)
 					}
 				}
 

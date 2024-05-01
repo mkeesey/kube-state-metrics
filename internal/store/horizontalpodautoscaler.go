@@ -53,7 +53,7 @@ var (
 	targetMetricLabels = []string{"metric_name", "metric_target_type"}
 )
 
-func hpaMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generator.FamilyGenerator {
+func hpaMetricFamilies(allowAnnotationsList, allowLabelsList []string, filterFn MetricFilterFunc) []generator.FamilyGenerator {
 	return []generator.FamilyGenerator{
 		createHPAInfo(),
 		createHPAMetaDataGeneration(),
@@ -65,7 +65,7 @@ func hpaMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generat
 		createHPAStatusDesiredReplicas(),
 		createHPAAnnotations(allowAnnotationsList),
 		createHPALabels(allowLabelsList),
-		createHPAStatusCondition(),
+		createHPAStatusCondition(filterFn),
 	}
 }
 
@@ -386,7 +386,7 @@ func createHPALabels(allowLabelsList []string) generator.FamilyGenerator {
 	)
 }
 
-func createHPAStatusCondition() generator.FamilyGenerator {
+func createHPAStatusCondition(filterFn MetricFilterFunc) generator.FamilyGenerator {
 	return *generator.NewFamilyGeneratorWithStability(
 		"kube_horizontalpodautoscaler_status_condition",
 		"The condition of this autoscaler.",
@@ -403,6 +403,10 @@ func createHPAStatusCondition() generator.FamilyGenerator {
 					metric := m
 					metric.LabelKeys = []string{"condition", "status"}
 					metric.LabelValues = append([]string{string(c.Type)}, metric.LabelValues...)
+
+					if filterFn(metric) {
+						continue
+					}
 					ms = append(ms, metric)
 				}
 			}

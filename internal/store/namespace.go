@@ -40,7 +40,7 @@ var (
 	descNamespaceLabelsDefaultLabels = []string{"namespace"}
 )
 
-func namespaceMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generator.FamilyGenerator {
+func namespaceMetricFamilies(allowAnnotationsList, allowLabelsList []string, filterFn MetricFilterFunc) []generator.FamilyGenerator {
 	return []generator.FamilyGenerator{
 		*generator.NewFamilyGeneratorWithStability(
 			"kube_namespace_created",
@@ -113,19 +113,23 @@ func namespaceMetricFamilies(allowAnnotationsList, allowLabelsList []string) []g
 			basemetrics.STABLE,
 			"",
 			wrapNamespaceFunc(func(n *v1.Namespace) *metric.Family {
-				ms := []*metric.Metric{
-					{
-						LabelValues: []string{string(v1.NamespaceActive)},
-						Value:       boolFloat64(n.Status.Phase == v1.NamespaceActive),
-					},
-					{
-						LabelValues: []string{string(v1.NamespaceTerminating)},
-						Value:       boolFloat64(n.Status.Phase == v1.NamespaceTerminating),
-					},
+				ms := make([]*metric.Metric, 0, 2)
+				m := &metric.Metric{
+					LabelKeys:   []string{"phase"},
+					LabelValues: []string{string(v1.NamespaceActive)},
+					Value:       boolFloat64(n.Status.Phase == v1.NamespaceActive),
+				}
+				if !filterFn(m) {
+					ms = append(ms, m)
 				}
 
-				for _, metric := range ms {
-					metric.LabelKeys = []string{"phase"}
+				m = &metric.Metric{
+					LabelKeys:   []string{"phase"},
+					LabelValues: []string{string(v1.NamespaceTerminating)},
+					Value:       boolFloat64(n.Status.Phase == v1.NamespaceTerminating),
+				}
+				if !filterFn(m) {
+					ms = append(ms, m)
 				}
 
 				return &metric.Family{
@@ -140,17 +144,20 @@ func namespaceMetricFamilies(allowAnnotationsList, allowLabelsList []string) []g
 			basemetrics.ALPHA,
 			"",
 			wrapNamespaceFunc(func(n *v1.Namespace) *metric.Family {
-				ms := make([]*metric.Metric, len(n.Status.Conditions)*len(conditionStatuses))
-				for i, c := range n.Status.Conditions {
+				ms := make([]*metric.Metric, 0, len(n.Status.Conditions)*len(conditionStatuses))
+				for _, c := range n.Status.Conditions {
 					conditionMetrics := addConditionMetrics(c.Status)
 
-					for j, m := range conditionMetrics {
+					for _, m := range conditionMetrics {
 						metric := m
 
 						metric.LabelKeys = []string{"condition", "status"}
 						metric.LabelValues = append([]string{string(c.Type)}, metric.LabelValues...)
 
-						ms[i*len(conditionStatuses)+j] = metric
+						if filterFn(metric) {
+							continue
+						}
+						ms = append(ms, metric)
 					}
 				}
 

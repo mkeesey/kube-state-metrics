@@ -348,8 +348,8 @@ func TestJobStore(t *testing.T) {
 		},
 	}
 	for i, c := range cases {
-		c.Func = generator.ComposeMetricGenFuncs(jobMetricFamilies(nil, nil))
-		c.Headers = generator.ExtractMetricFamilyHeaders(jobMetricFamilies(nil, nil))
+		c.Func = generator.ComposeMetricGenFuncs(jobMetricFamilies(nil, nil, KeepAllFilter))
+		c.Headers = generator.ExtractMetricFamilyHeaders(jobMetricFamilies(nil, nil, KeepAllFilter))
 		if err := c.run(); err != nil {
 			t.Errorf("unexpected collecting result in %vth run:\n%s", i, err)
 		}
