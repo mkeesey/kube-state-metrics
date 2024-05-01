@@ -43,7 +43,7 @@ var (
 	jobFailureReasons          = []string{"BackoffLimitExceeded", "DeadlineExceeded", "Evicted"}
 )
 
-func jobMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generator.FamilyGenerator {
+func jobMetricFamilies(allowAnnotationsList, allowLabelsList []string, filterFn MetricFilterFunc) []generator.FamilyGenerator {
 	return []generator.FamilyGenerator{
 		*generator.NewFamilyGeneratorWithStability(
 			descJobAnnotationsName,
@@ -280,6 +280,10 @@ func jobMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generat
 						for _, m := range metrics {
 							metric := m
 							metric.LabelKeys = []string{"condition"}
+
+							if filterFn(metric) {
+								continue
+							}
 							ms = append(ms, metric)
 						}
 					}
@@ -305,6 +309,10 @@ func jobMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generat
 						for _, m := range metrics {
 							metric := m
 							metric.LabelKeys = []string{"condition"}
+
+							if filterFn(metric) {
+								continue
+							}
 							ms = append(ms, metric)
 						}
 					}

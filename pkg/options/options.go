@@ -77,6 +77,7 @@ type Options struct {
 	CustomResourcesOnly  bool  `yaml:"custom_resources_only"`
 	EnableGZIPEncoding   bool  `yaml:"enable_gzip_encoding"`
 	Help                 bool  `yaml:"help"`
+	MetricKeepTrue       bool  `yaml:"metric_keep_true""`
 	TrackUnscheduledPods bool  `yaml:"track_unscheduled_pods"`
 	UseAPIServerCache    bool  `yaml:"use_api_server_cache"`
 }
@@ -141,6 +142,7 @@ func (o *Options) AddFlags(cmd *cobra.Command) {
 	o.cmd.Flags().BoolVar(&o.CustomResourcesOnly, "custom-resource-state-only", false, "Only provide Custom Resource State metrics (experimental)")
 	o.cmd.Flags().BoolVar(&o.EnableGZIPEncoding, "enable-gzip-encoding", false, "Gzip responses when requested by clients via 'Accept-Encoding: gzip' header.")
 	o.cmd.Flags().BoolVar(&o.TrackUnscheduledPods, "track-unscheduled-pods", false, "This configuration is used in conjunction with node configuration. When this configuration is true, node configuration is empty and the metric of unscheduled pods is fetched from the Kubernetes API Server. This is experimental.")
+	o.cmd.Flags().BoolVar(&o.MetricKeepTrue, "metric-keep-true", false, "Only keep series with positive values for conditions or states.  By default, all metric values are kept.")
 	o.cmd.Flags().BoolVarP(&o.Help, "help", "h", false, "Print Help text")
 	o.cmd.Flags().BoolVarP(&o.UseAPIServerCache, "use-apiserver-cache", "", false, "Sets resourceVersion=0 for ListWatch requests, using cached resources from the apiserver instead of an etcd quorum read.")
 	o.cmd.Flags().Int32Var(&o.Shard, "shard", int32(0), "The instances shard nominal (zero indexed) within the total number of shards. (default 0)")
@@ -203,4 +205,9 @@ func (o *Options) Validate() error {
 	}
 
 	return nil
+}
+
+// Changed returns true if the value of the flag with the given name was changed.
+func (o *Options) Changed(name string) bool {
+	return o.cmd.Flags().Changed(name)
 }

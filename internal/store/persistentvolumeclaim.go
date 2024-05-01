@@ -40,7 +40,7 @@ var (
 	descPersistentVolumeClaimLabelsDefaultLabels = []string{"namespace", "persistentvolumeclaim"}
 )
 
-func persistentVolumeClaimMetricFamilies(allowAnnotationsList, allowLabelsList []string) []generator.FamilyGenerator {
+func persistentVolumeClaimMetricFamilies(allowAnnotationsList, allowLabelsList []string, filterFn MetricFilterFunc) []generator.FamilyGenerator {
 	return []generator.FamilyGenerator{
 		*generator.NewFamilyGeneratorWithStability(
 			descPersistentVolumeClaimLabelsName,
@@ -201,18 +201,21 @@ func persistentVolumeClaimMetricFamilies(allowAnnotationsList, allowLabelsList [
 			basemetrics.ALPHA,
 			"",
 			wrapPersistentVolumeClaimFunc(func(p *v1.PersistentVolumeClaim) *metric.Family {
-				ms := make([]*metric.Metric, len(p.Status.Conditions)*len(conditionStatuses))
+				ms := make([]*metric.Metric, 0, len(p.Status.Conditions)*len(conditionStatuses))
 
-				for i, c := range p.Status.Conditions {
+				for _, c := range p.Status.Conditions {
 					conditionMetrics := addConditionMetrics(c.Status)
 
-					for j, m := range conditionMetrics {
+					for _, m := range conditionMetrics {
 						metric := m
 
 						metric.LabelKeys = []string{"condition", "status"}
 						metric.LabelValues = append([]string{string(c.Type)}, metric.LabelValues...)
 
-						ms[i*len(conditionStatuses)+j] = metric
+						if filterFn(metric) {
+							continue
+						}
+						ms = append(ms, metric)
 					}
 				}
 

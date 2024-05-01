@@ -209,6 +209,8 @@ In a 100 node cluster scaling test the latency numbers were as follows:
 
 By default, kube-state-metrics exposes several metrics for events across your cluster. If you have a large number of frequently-updating resources on your cluster, you may find that a lot of data is ingested into these metrics. This can incur high costs on some cloud providers. Please take a moment to [configure what metrics you'd like to expose](docs/developer/cli-arguments.md), as well as consult the documentation for your Kubernetes environment in order to avoid unexpectedly high costs.
 
+To reduce cardinality, you can set `--metric-keep-true` to keep series with positive values.  This drops series with "condition" labels and multiple state labels. This will reduce the number of time series created by kube-state-metrics.  This may affect queries that expect a zero value.
+
 ### kube-state-metrics vs. metrics-server
 
 The [metrics-server](https://github.com/kubernetes-incubator/metrics-server)

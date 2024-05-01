@@ -41,6 +41,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+	"k8s.io/kube-state-metrics/v2/pkg/metric"
 
 	ksmtypes "k8s.io/kube-state-metrics/v2/pkg/builder/types"
 	"k8s.io/kube-state-metrics/v2/pkg/customresource"
@@ -83,11 +84,14 @@ type Builder struct {
 	totalShards         int
 	shard               int32
 	useAPIServerCache   bool
+	metricFilterFunc    MetricFilterFunc
 }
 
 // NewBuilder returns a new builder.
 func NewBuilder() *Builder {
-	b := &Builder{}
+	b := &Builder{
+		metricFilterFunc: KeepAllFilter,
+	}
 	return b
 }
 
@@ -256,6 +260,13 @@ func (b *Builder) WithAllowLabels(labels map[string][]string) error {
 	return err
 }
 
+// WithMetricFilter configures a filter function to allow dropping metrics
+// based on values, label keys or values.  If the fn return true, the metric
+// will be filtered.
+func (b *Builder) WithMetricFilter(fn func(*metric.Metric) bool) {
+	b.metricFilterFunc = fn
+}
+
 // Build initializes and registers all enabled stores.
 // It returns metrics writers which can be used to write out
 // metrics from the stores.
@@ -372,7 +383,7 @@ func (b *Builder) buildDaemonSetStores() []cache.Store {
 }
 
 func (b *Builder) buildDeploymentStores() []cache.Store {
-	return b.buildStoresFunc(deploymentMetricFamilies(b.allowAnnotationsList["deployments"], b.allowLabelsList["deployments"]), &appsv1.Deployment{}, createDeploymentListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(deploymentMetricFamilies(b.allowAnnotationsList["deployments"], b.allowLabelsList["deployments"], b.metricFilterFunc), &appsv1.Deployment{}, createDeploymentListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildEndpointsStores() []cache.Store {
@@ -384,7 +395,7 @@ func (b *Builder) buildEndpointSlicesStores() []cache.Store {
 }
 
 func (b *Builder) buildHPAStores() []cache.Store {
-	return b.buildStoresFunc(hpaMetricFamilies(b.allowAnnotationsList["horizontalpodautoscalers"], b.allowLabelsList["horizontalpodautoscalers"]), &autoscaling.HorizontalPodAutoscaler{}, createHPAListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(hpaMetricFamilies(b.allowAnnotationsList["horizontalpodautoscalers"], b.allowLabelsList["horizontalpodautoscalers"], b.metricFilterFunc), &autoscaling.HorizontalPodAutoscaler{}, createHPAListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildIngressStores() []cache.Store {
@@ -392,7 +403,7 @@ func (b *Builder) buildIngressStores() []cache.Store {
 }
 
 func (b *Builder) buildJobStores() []cache.Store {
-	return b.buildStoresFunc(jobMetricFamilies(b.allowAnnotationsList["jobs"], b.allowLabelsList["jobs"]), &batchv1.Job{}, createJobListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(jobMetricFamilies(b.allowAnnotationsList["jobs"], b.allowLabelsList["jobs"], b.metricFilterFunc), &batchv1.Job{}, createJobListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildLimitRangeStores() []cache.Store {
@@ -404,7 +415,7 @@ func (b *Builder) buildMutatingWebhookConfigurationStores() []cache.Store {
 }
 
 func (b *Builder) buildNamespaceStores() []cache.Store {
-	return b.buildStoresFunc(namespaceMetricFamilies(b.allowAnnotationsList["namespaces"], b.allowLabelsList["namespaces"]), &v1.Namespace{}, createNamespaceListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(namespaceMetricFamilies(b.allowAnnotationsList["namespaces"], b.allowLabelsList["namespaces"], b.metricFilterFunc), &v1.Namespace{}, createNamespaceListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildNetworkPolicyStores() []cache.Store {
@@ -412,11 +423,11 @@ func (b *Builder) buildNetworkPolicyStores() []cache.Store {
 }
 
 func (b *Builder) buildNodeStores() []cache.Store {
-	return b.buildStoresFunc(nodeMetricFamilies(b.allowAnnotationsList["nodes"], b.allowLabelsList["nodes"]), &v1.Node{}, createNodeListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(nodeMetricFamilies(b.allowAnnotationsList["nodes"], b.allowLabelsList["nodes"], b.metricFilterFunc), &v1.Node{}, createNodeListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildPersistentVolumeClaimStores() []cache.Store {
-	return b.buildStoresFunc(persistentVolumeClaimMetricFamilies(b.allowAnnotationsList["persistentvolumeclaims"], b.allowLabelsList["persistentvolumeclaims"]), &v1.PersistentVolumeClaim{}, createPersistentVolumeClaimListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(persistentVolumeClaimMetricFamilies(b.allowAnnotationsList["persistentvolumeclaims"], b.allowLabelsList["persistentvolumeclaims"], b.metricFilterFunc), &v1.PersistentVolumeClaim{}, createPersistentVolumeClaimListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildPersistentVolumeStores() []cache.Store {
@@ -460,7 +471,7 @@ func (b *Builder) buildStorageClassStores() []cache.Store {
 }
 
 func (b *Builder) buildPodStores() []cache.Store {
-	return b.buildStoresFunc(podMetricFamilies(b.allowAnnotationsList["pods"], b.allowLabelsList["pods"]), &v1.Pod{}, createPodListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(podMetricFamilies(b.allowAnnotationsList["pods"], b.allowLabelsList["pods"], b.metricFilterFunc), &v1.Pod{}, createPodListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildCsrStores() []cache.Store {

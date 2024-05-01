@@ -232,6 +232,11 @@ func RunKubeStateMetrics(ctx context.Context, opts *options.Options) error {
 
 	klog.InfoS("Metric allow-denylisting", "allowDenyStatus", allowDenyList.Status())
 
+	if opts.Changed("metric-keep-true") {
+		klog.Info("Dropping series with false values")
+		storeBuilder.WithMetricFilter(store.DropFalseFilter)
+	}
+
 	optInMetricFamilyFilter, err := optin.NewMetricFamilyFilter(opts.MetricOptInList)
 	if err != nil {
 		return fmt.Errorf("error initializing the opt-in metric list: %v", err)

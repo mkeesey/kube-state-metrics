@@ -18,6 +18,7 @@ package store
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -57,6 +58,11 @@ func boolFloat64(b bool) float64 {
 		return 1
 	}
 	return 0
+}
+
+// isFalse return true if v is close to 0.
+func isFalse(v float64) bool {
+	return math.Abs(0-v) <= 1e-12
 }
 
 // addConditionMetrics generates one metric for each possible condition
